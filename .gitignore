@@ -1,0 +1,10 @@
+.venv-captcha/
+.venv/
+__pycache__/
+*.pyc
+.claude/
+old-code/
+out/
+.env
+*.tgz
+*.tar.gz

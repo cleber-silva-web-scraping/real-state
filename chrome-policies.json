@@ -1,0 +1,8 @@
+{
+  "ExtensionSettings": {
+    "*": {
+      "allow_in_incognito": true,
+      "installation_mode": "allowed"
+    }
+  }
+}
