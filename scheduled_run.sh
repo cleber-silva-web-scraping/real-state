@@ -30,8 +30,8 @@ rm -f out/checkpoint.json out/zillow_urls_*.csv
 # sobe o container (imagem ja buildada, SEM build aqui); EXIT_AFTER=1 -> sai ao terminar
 REGION="$REGION" bash dev.sh run >> "$LOG" 2>&1
 
-# bloqueia ate o container terminar; failsafe de 3h se travar
-if ! timeout 3h docker wait zillow >> "$LOG" 2>&1; then
+# bloqueia ate o container terminar; failsafe de 5h se travar
+if ! timeout 5h docker wait zillow >> "$LOG" 2>&1; then
     echo "[$(date '+%F %T')] TIMEOUT/erro -> forcando stop" >> "$LOG"
     docker stop zillow >/dev/null 2>&1 || true
 fi
