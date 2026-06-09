@@ -151,14 +151,17 @@ transferir imagem entre sistemas). Build **não apaga o banco**.
 ```bash
 sudo bash setup.sh
 ```
-Idempotente. Faz `chown 1000` no `out/`, deixa os scripts executáveis e instala no
-crontab do **root** as 4 rodadas abaixo (1 estado por horário, 6/12/18/24h + 15min):
+Idempotente. Faz `chown 1000` no `out/`, deixa os scripts executáveis e instala o
+cron no **root**. Cada linha pode ter **1 estado** ou **vários agrupados** (rodam em
+**sequência** no mesmo boot, com **1 start listando todos + relatório por estado**):
 ```cron
-15 6  * * *  /CAMINHO/new-zillow/scheduled_run.sh WY
-15 12 * * *  /CAMINHO/new-zillow/scheduled_run.sh SD
+# pequenos juntos de manhã, grande sozinho à noite (menos liga/desliga):
+15 6  * * *  /CAMINHO/new-zillow/scheduled_run.sh "WY,SD,KY"
 15 18 * * *  /CAMINHO/new-zillow/scheduled_run.sh KS
-15 0  * * *  /CAMINHO/new-zillow/scheduled_run.sh KY
 ```
+Agrupar estados pequenos (atualizam em 3-5min cada) permite **mais atualizações/dia**
+(ex: manhã + noite) com menos ciclos de liga/desliga. A captura do hash roda **1×**
+e serve pra todos os estados da sequência.
 (pra trocar estados/horários, edite o bloco no `setup.sh` e rode de novo, ou
 `sudo crontab -e`).
 - **root** porque usa `docker` + `poweroff`.

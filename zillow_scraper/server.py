@@ -119,7 +119,9 @@ def main():
     print(f"Retries: max={MAX_RETRIES} delay={RETRY_DELAY_SECONDS}s timeout={PROCESSING_TIMEOUT_SECONDS}s")
     print(f"Block selectors: {BLOCK_SELECTORS}")
 
-    sent, err = send_telegram_message("Start Zillow extraction")
+    start_msg = "Zillow — inicio da extracao. Estados (nesta ordem): " + ", ".join(COLLECT_STATES)
+    print("[start] " + start_msg, flush=True)
+    sent, err = send_telegram_message(start_msg)
     if not sent and err:
         print(f"warning: startup telegram failed: {err}")
 

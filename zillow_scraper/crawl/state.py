@@ -72,6 +72,12 @@ class CrawlState(UrlCollectMixin, CaptureMixin, DetailMixin, PersistenceMixin, M
         self._captcha_count = 0        # bloqueios PX (renderizam captcha)
         self._start_epoch = time.time()
         self._run_started_at = time.strftime("%Y-%m-%d %H:%M:%S")  # formato do storage
+        # fila de estados (roda 1 por vez, em sequencia; relatorio por estado)
+        self._states = [s for s in COLLECT_STATES if s in zillow_search.STATES] or list(COLLECT_STATES)
+        self._state_idx = 0
+        self._state_started_at = self._run_started_at
+        self._state_started_epoch = self._start_epoch
+        self._state_base = {}   # snapshot dos contadores no inicio do estado (p/ delta)
         self._urls_csv_file = COLLECT_URLS_CSV
         # metricas
         self._m_queries = 0
@@ -95,8 +101,27 @@ class CrawlState(UrlCollectMixin, CaptureMixin, DetailMixin, PersistenceMixin, M
             # detalhe (retoma os que faltaram, pulando os ja salvos por hash).
             self._enter_detail_stage_locked()
         elif not self._api_stack:
-            self._seed_api_stack_locked()
+            self._begin_state_locked()   # 1o estado da fila
         self._prepare_next_api_query_task_locked()
+
+    def _current_state(self):
+        return self._states[self._state_idx] if self._state_idx < len(self._states) else None
+
+    def _begin_state_locked(self):
+        # inicia (ou reinicia p/ o proximo) estado: reseta o estagio de urls + guarda
+        # o snapshot dos contadores p/ calcular o delta do estado no relatorio.
+        self._api_stage = "urls"
+        self._api_stack = []
+        self._detail_queue = []
+        self._state_started_at = time.strftime("%Y-%m-%d %H:%M:%S")
+        self._state_started_epoch = time.time()
+        self._state_url_base = len(self._api_collected_urls)  # p/ MAXURLS por estado
+        self._state_base = {
+            "new": self._details_new, "upd": self._details_updated,
+            "saved": self._details_saved, "exp": self._hash_expired_count,
+            "capt": self._captcha_count, "jb": self._m_json_bytes, "pb": self._m_page_bytes,
+        }
+        self._seed_api_stack_locked()
 
     def _prepare_next_api_query_task_locked(self):
         if self._active_task is not None:
@@ -119,18 +144,24 @@ class CrawlState(UrlCollectMixin, CaptureMixin, DetailMixin, PersistenceMixin, M
                 self._status = "pending"
                 return
 
-        # estagio detail
+        # estagio detail: fila vazia -> terminou o estado atual
         if not self._detail_queue:
-            self._status = "finished"
+            self._finalize_state_locked()       # relatorio do estado (Telegram)
+            self._state_idx += 1
+            if self._state_idx < len(self._states):
+                self._begin_state_locked()       # proximo estado -> volta p/ urls
+                self._prepare_next_api_query_task_locked()
+                return
+            self._status = "finished"            # acabaram os estados
             self._active_task = None
-            self._finalize_api_locked()
+            self._finalize_run_locked()
             return
 
         # 1o: auto-capturar o hash da CASA em /{estado}/rent-houses/ + CLIQUE REAL numa
         # casa (o GET /graphql full-property so dispara via clique SPA, nao no load SSR).
         if not self._detail_capture_done and self._capture_attempts < 4:
             self._capture_attempts += 1
-            state = COLLECT_STATES[0] if COLLECT_STATES else "ca"
+            state = self._current_state() or (COLLECT_STATES[0] if COLLECT_STATES else "ca")
             self._active_task = {
                 "kind": "api_capture",
                 "url": zillow_search.rent_houses_url(state),

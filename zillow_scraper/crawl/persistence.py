@@ -35,41 +35,48 @@ class PersistenceMixin:
         self._api_urls_saved = parse_int(saved.get("api_urls_saved"), 0)
         self._api_queries_done = parse_int(saved.get("api_queries_done"), 0)
         self._details_saved = parse_int(saved.get("details_saved"), 0)
-    def _finalize_api_locked(self):
+    def _finalize_state_locked(self):
+        # relatorio do ESTADO atual (delta desde o inicio deste estado). Chamado ao
+        # esvaziar a fila de detalhe de cada estado da sequencia.
+        state = self._current_state() or "?"
+        b = self._state_base or {}
+        new = self._details_new - b.get("new", 0)
+        upd = self._details_updated - b.get("upd", 0)
+        exp = self._hash_expired_count - b.get("exp", 0)
+        capt = self._captcha_count - b.get("capt", 0)
+        mb = ((self._m_json_bytes - b.get("jb", 0)) + (self._m_page_bytes - b.get("pb", 0))) / 1048576
+        try:
+            removed = storage_db.mark_removed(self._state_started_at, [state])
+        except Exception:
+            removed = 0
+        elapsed = int(time.time() - self._state_started_epoch)
+        m, s = divmod(elapsed, 60)
+        h, m = divmod(m, 60)
+        dur = f"{h}h{m:02d}m{s:02d}s" if h else f"{m}m{s:02d}s"
+        msg = (
+            f"Zillow {state} — concluido\n"
+            f"inicio: {self._state_started_at}\n"
+            f"duracao: {dur}\n"
+            f"detalhes novos: {new}\n"
+            f"detalhes atualizados: {upd}\n"
+            f"detalhes removidos: {removed}\n"
+            f"hash expirou: {exp}x\n"
+            f"captcha: {capt}x\n"
+            f"baixado: {round(mb, 2)} MB"
+        )
+        send_telegram_message(msg)
+        print("[estado]\n" + msg, flush=True)
+
+    def _finalize_run_locked(self):
+        # fim de TODOS os estados: salva metricas da run (relatorio ja foi por estado)
         if self._finalization_done:
             return
         self._finalization_done = True
-        metrics = self._metrics_summary_locked()
         try:
-            storage_db.save_run_metrics(self._process_id, metrics)
+            storage_db.save_run_metrics(self._process_id, self._metrics_summary_locked())
         except Exception:
             pass
-        # delete LOGICO dos que sumiram (active=0), escopado pelos estados do run
-        # -> um run de SD nao mexe no WY. Mantem linha + detalhe.
-        try:
-            removed = storage_db.mark_removed(self._run_started_at, COLLECT_STATES)
-        except Exception:
-            removed = 0
-        elapsed = int(time.time() - self._start_epoch)
-        h, rem = divmod(elapsed, 3600)
-        m, s = divmod(rem, 60)
-        dur = f"{h}h{m:02d}m{s:02d}s" if h else f"{m}m{s:02d}s"
-        total_mb = metrics.get("total_mb", 0)
-        msg = (
-            "Zillow — extracao concluida\n"
-            f"regiao: {','.join(COLLECT_STATES)}\n"
-            f"inicio: {self._run_started_at}\n"
-            f"duracao: {dur}\n"
-            f"urls encontradas: {self._api_urls_saved}\n"
-            f"detalhes novos: {self._details_new}\n"
-            f"detalhes atualizados: {self._details_updated}\n"
-            f"detalhes removidos: {removed}\n"
-            f"hash expirou: {self._hash_expired_count}x\n"
-            f"captcha: {self._captcha_count}x\n"
-            f"baixado total: {total_mb} MB"
-        )
-        send_telegram_message(msg)
-        print("[finalize]\n" + msg, flush=True)
+        print("[run] todos os estados concluidos", flush=True)
 
     def _persist_api_locked(self):
         CHECKPOINT_FILE.parent.mkdir(parents=True, exist_ok=True)

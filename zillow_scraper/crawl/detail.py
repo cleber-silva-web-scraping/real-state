@@ -22,8 +22,11 @@ class DetailMixin:
         self._api_stage = "detail"
         self._api_stack = []
         limit = COLLECT_MAX_URLS if COLLECT_MAX_URLS > 0 else 0
-        # escopa por estado(s) do run -> SD nao detalha WY
-        self._detail_queue = storage_db.iter_zpids_needing_detail(limit, COLLECT_STATES)
+        # so o estado atual da fila (sequencial; detalha 1 estado por vez)
+        state = self._current_state()
+        self._detail_queue = storage_db.iter_zpids_needing_detail(
+            limit, [state] if state else COLLECT_STATES
+        )
         # hash so em memoria: captura 1x por run (se ja capturou, nao repete).
         self._detail_capture_done = self._house_captured
         self._capture_attempts = 0

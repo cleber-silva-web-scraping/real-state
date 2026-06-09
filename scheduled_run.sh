@@ -3,15 +3,16 @@
 # a maquina ao terminar. A maquina liga agendada (RTC/BIOS) no topo da hora; o cron
 # dispara 15min depois (boot ja estabilizado).
 #
-# Uso:  scheduled_run.sh <ESTADO>     (ex: scheduled_run.sh WY)
+# Uso:  scheduled_run.sh <ESTADO>            (ex: scheduled_run.sh WY)
+#       scheduled_run.sh "<E1,E2,E3>"        (varios -> rodam EM SEQUENCIA, relatorio
+#                                             por estado, 1 start listando todos)
 #
 # Pre-requisito (1x): a imagem precisa existir -> rode antes `bash dev.sh build`.
 #
-# Crontab do ROOT (sudo crontab -e) — um estado por horario (6/12/18/24h + 15min):
-#   15 6  * * *  /CAMINHO/new-zillow/scheduled_run.sh WY
-#   15 12 * * *  /CAMINHO/new-zillow/scheduled_run.sh SD
-#   15 18 * * *  /CAMINHO/new-zillow/scheduled_run.sh KS
-#   15 0  * * *  /CAMINHO/new-zillow/scheduled_run.sh KY   # 24h
+# Crontab do ROOT (sudo crontab -e). Pode ser 1 estado por linha OU agrupar pequenos:
+#   15 6  * * *  /CAMINHO/new-zillow/scheduled_run.sh "WY,SD,KY"  # 3 pequenos juntos
+#   15 18 * * *  /CAMINHO/new-zillow/scheduled_run.sh KS          # 1 maior sozinho
+# (agrupar = menos liga/desliga + da p/ atualizar 2x/dia: manha e noite)
 #
 # Precisa de root (docker + poweroff). Log em out/cron.log.
 set -u

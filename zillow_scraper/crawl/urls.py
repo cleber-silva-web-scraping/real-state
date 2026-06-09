@@ -33,21 +33,22 @@ class UrlCollectMixin:
             return set()
         return urls
     def _seed_api_stack_locked(self):
-        # DFS: um no "probe" por (estado, categoria) com faixa de pagamento full.
-        for state in COLLECT_STATES:
-            if state not in zillow_search.STATES:
-                continue
-            for category in zillow_search.RENT_CRITERIAS:
-                self._api_stack.append({
-                    "state": state,
-                    "category": category,
-                    "sort": zillow_search.RENT_SORT_PRIMARY,
-                    "payment": {"min": 0, "max": None},
-                    "sqft": None,
-                    "phase": "probe",
-                    "page": 1,
-                    "total_pages": None,
-                })
+        # DFS: um no "probe" por categoria, SO do estado atual da fila (rodamos 1
+        # estado por vez, em sequencia, com relatorio por estado).
+        state = self._current_state()
+        if not state or state not in zillow_search.STATES:
+            return
+        for category in zillow_search.RENT_CRITERIAS:
+            self._api_stack.append({
+                "state": state,
+                "category": category,
+                "sort": zillow_search.RENT_SORT_PRIMARY,
+                "payment": {"min": 0, "max": None},
+                "sqft": None,
+                "phase": "probe",
+                "page": 1,
+                "total_pages": None,
+            })
     def _api_build_query_body(self, node, page):
         return zillow_search.build_request_body(
             node["state"], node["category"], page,
@@ -57,7 +58,9 @@ class UrlCollectMixin:
         )
 
     def _max_urls_reached(self):
-        return COLLECT_MAX_URLS > 0 and len(self._api_collected_urls) >= COLLECT_MAX_URLS
+        # POR ESTADO: conta o que foi coletado desde o inicio do estado atual
+        base = getattr(self, "_state_url_base", 0)
+        return COLLECT_MAX_URLS > 0 and (len(self._api_collected_urls) - base) >= COLLECT_MAX_URLS
     def _process_api_query_locked(self, selector_data, payload):
         node = self._active_task.get("node", {})
         parsed = zillow_search.parse_results(selector_data)
