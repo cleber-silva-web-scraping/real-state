@@ -140,6 +140,19 @@ def has_detail(zpid):
     return r is not None
 
 
+def count_active(state=None):
+    """Quantos imoveis ATIVOS (active=1), opcionalmente de um estado."""
+    sql = "SELECT COUNT(*) AS n FROM urls WHERE COALESCE(active,1)=1"
+    params = []
+    if state:
+        sql += " AND state=?"
+        params.append(state.upper())
+    with _lock:
+        conn = _connect()
+        r = conn.execute(sql, params).fetchone()
+    return r["n"] if r else 0
+
+
 def mark_removed(before_ts, states=None):
     """DELETE LOGICO: marca active=0 + removed_at nos imoveis nao-vistos desde
     before_ts (sumiram da busca). Mantem a linha + o detalhe. Retorna quantos

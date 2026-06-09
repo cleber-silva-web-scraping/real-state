@@ -49,6 +49,10 @@ class PersistenceMixin:
             removed = storage_db.mark_removed(self._state_started_at, [state])
         except Exception:
             removed = 0
+        try:
+            total_ativo = storage_db.count_active(state)  # apos o mark_removed
+        except Exception:
+            total_ativo = 0
         elapsed = int(time.time() - self._state_started_epoch)
         m, s = divmod(elapsed, 60)
         h, m = divmod(m, 60)
@@ -60,6 +64,7 @@ class PersistenceMixin:
             f"detalhes novos: {new}\n"
             f"detalhes atualizados: {upd}\n"
             f"detalhes removidos: {removed}\n"
+            f"total ativo: {total_ativo}\n"
             f"hash expirou: {exp}x\n"
             f"captcha: {capt}x\n"
             f"baixado: {round(mb, 2)} MB"
