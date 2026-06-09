@@ -165,7 +165,7 @@ e serve pra todos os estados da sequência.
 (pra trocar estados/horários, edite o bloco no `setup.sh` e rode de novo, ou
 `sudo crontab -e`).
 - **root** porque usa `docker` + `poweroff`.
-- `timeout 5h` (failsafe): trava → desliga mesmo assim.
+- `timeout 6h` (failsafe): trava → desliga mesmo assim.
 - Sem build no agendado (imagem fixa). Log em `out/cron.log`.
 - A máquina precisa estar de pé antes do HH:15 (cron não recupera minuto perdido;
   os 15min cobrem o boot).
