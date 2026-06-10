@@ -294,3 +294,51 @@ print('urls',c.execute('SELECT COUNT(*) FROM urls').fetchone()[0],\
 Medido (1 container, CA): **~0,9 s/registro** e **~235 KB/registro** (linear). A captura
 do hash é fixa (~60 s, 1× por run; amortiza na escala). Banda real total via
 `docker stats zillow`. Harness de medição: `scale_test.sh`.
+
+---
+
+## Benchmark / acompanhamento (produção)
+
+Log dos boots reais na máquina remota agendada (Raspberry liga o PC via pulse +
+tomada inteligente; Docker sobe → processa → `poweroff`). 3 boots/dia (06h/15h/00h,
+cron ~HH:15). Objetivo: acompanhar desempenho e **projetar até a base alvo de ~4M
+registros**. Anti-bot validado: `captcha 0x` e `hash expirou 0x` em **todos** os boots
+abaixo.
+
+### Cold-load (1ª coleta de um estado — baixa tudo)
+| estado | data | duração | novos | baixado |
+|---|---|---|---|---|
+| UT | 2026-06-09 16:46 | 2h46m | 6 411 | 1 478,73 MB |
+| NE | 2026-06-10 04:18 | 56m55s | 2 375 | 644,87 MB |
+| MO | 2026-06-10 10:14 | 3h35m | 8 809 | 1 827,05 MB |
+
+> ~0,21–0,23 MB/registro, ~1,5 s/registro no cold. Cold-loads são **escalonados em
+> horários diferentes** (nunca 2 no mesmo boot) pra não somar e estourar o `timeout 6h`.
+
+### Steady-state (delta — 2-hash pula inalterado)
+Boot completo `WY,SD,KS,KY,UT,NE,MO` (2026-06-10 18:10):
+
+| estado | duração | novos | atualiz | removidos | total ativo | baixado |
+|---|---|---|---|---|---|---|
+| WY | 4m02s | 9 | 5 | 12 | 717 | 16,91 MB |
+| SD | 3m25s | 20 | 10 | 22 | 1 141 | 31,04 MB |
+| KS | 7m40s | 48 | 15 | 41 | 3 091 | 63,54 MB |
+| KY | 18m47s | 92 | 57 | 66 | 4 812 | 117,69 MB |
+| UT | 26m32s | 128 | 98 | 106 | 6 469 | 207,21 MB |
+| NE | 9m08s | 67 | 27 | 66 | 2 372 | 100,80 MB |
+| MO | 45m16s | 197 | 124 | 164 | 8 842 | 279,20 MB |
+| **total** | **≈2h14m** | 561 | 336 | 477 | **27 444 ativos** | **816 MB** |
+
+> Steady-state diário ≈ 2h14m para 7 estados (folga grande sob `timeout 6h`).
+> Base ativa atual: **~27,4k** registros (7 estados). Projeção p/ ~4M ⇒ escalar
+> nº de estados/cobertura; tempo de cold escala linear (~1,5 s/reg), delta diário
+> escala com o churn (~2-4% da base/boot).
+
+### Histórico de boots (resumo, cole novos aqui)
+| boot | estados | cold do boot | duração total | obs |
+|---|---|---|---|---|
+| 2026-06-09 15:15 | SD (+limpeza WY/SD) | — | 6m15s | limpa sobra de diag |
+| 2026-06-09 16:10 | WY,SD,KS,KY,UT | **UT** | ~3h00m | 1º cold UT |
+| 2026-06-10 03:10 | WY,SD,KS,KY,UT,NE | **NE** | ~1h33m | 1º cold NE (noite) |
+| 2026-06-10 09:10 | WY,SD,KS,KY,UT,NE,MO | **MO** | ~4h41m | 1º cold MO (dia) |
+| 2026-06-10 18:10 | WY,SD,KS,KY,UT,NE,MO | — | ~2h14m | 1º boot 100% delta |
