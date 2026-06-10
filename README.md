@@ -342,3 +342,46 @@ Boot completo `WY,SD,KS,KY,UT,NE,MO` (2026-06-10 18:10):
 | 2026-06-10 03:10 | WY,SD,KS,KY,UT,NE | **NE** | ~1h33m | 1º cold NE (noite) |
 | 2026-06-10 09:10 | WY,SD,KS,KY,UT,NE,MO | **MO** | ~4h41m | 1º cold MO (dia) |
 | 2026-06-10 18:10 | WY,SD,KS,KY,UT,NE,MO | — | ~2h14m | 1º boot 100% delta |
+
+---
+
+## Próximos passos (roadmap)
+
+Ordem: deixar rodando uns dias coletando → depois atacar nesta ordem.
+
+### 1. Particionador dinâmico de cold-load
+Estados grandes (TX 200k+) **não cabem num boot** (`timeout 6h` ≈ 14k registros a
+~1,5 s/reg). Plano: **calcular as fatias por estado** (não corte fixo — cada estado
+tem volume diferente).
+
+- **Sonda de volume:** usar o `total_items` real que a faceta já retorna
+  (`crawl/urls.py` usa pra decidir subdividir) pra **medir antes de coletar**.
+- **Corte dinâmico:** descer a árvore de facetas que já existe
+  (`payment → sqft → category → sort`) até cada folha **≤ ~20k** → emitir N planos
+  (1 fatia por boot). Estado pequeno = 1 plano; TX = vários por faixa de preço.
+- **20k é alvo, não garantia:** faceta capa paginação em ~19 págs; bucket irredutível
+  (mesmo preço+sqft acima do teto) pode passar mesmo subdividido ao máximo.
+- **⚠️ Bloqueador — `mark_removed`:** hoje assume que *todo boot redescobre o estado
+  inteiro* (marca `active=0` em tudo com `last_seen < state_started`). Com fatia, isso
+  marcaria as **outras fatias** como removidas. Fix: escopar `mark_removed` no
+  predicado da fatia (`state + faixa`) **ou** adiar até todas as fatias do estado
+  fecharem. (O estágio de **detalhe** já resume entre boots de graça:
+  `iter_zpids_needing_detail` reconstrói a fila do banco, 2-hash pula os feitos, e o
+  `mark_removed` só dispara quando a fila zera.)
+
+### 2. Análise de falsos-positivos de saída da base
+Investigar imóveis marcados `active=0` (saíram da busca) que **não saíram de verdade**.
+Causas prováveis: faceta não cobriu a fatia naquele boot, paginação capada, timeout no
+meio. Marcar como removido o que só ficou invisível polui a base. Precisa de critério
+(ex: só remover após N boots sem ver, ou confirmar via detalhe) antes de escalar.
+
+### 3. Dedup de imóveis aninhados
+Alguns imóveis vêm com **imóveis dentro** (ex: prédio/listing que carrega outras
+unidades no payload). Esses precisam ser **deduplicados** — extrair as unidades como
+registros próprios sem duplicar o pai, ou descartar o aninhado. Mapear onde isso
+aparece no JSON de detalhe (`details.json`) e definir a regra de dedup.
+
+### 4. Web manager (controle remoto)
+UI remota pra **escolher o que o container roda** (estado/fatia), substituindo a edição
+manual do cron. O backend já expõe API HTTP local (`server.py`) pra extensão — base pra
+estender. Objetivo: comandar a coleta de longe, sem `crontab -e` na máquina.
